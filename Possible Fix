@@ -1,0 +1,144 @@
+To improve error messages in the `agents-api` and make them more informative, I will guide you on how to enhance error handling in the `models/utils.py` and `models/agent/create_agent.py` files. 
+
+### Steps to Implement the Changes:
+
+#### 1. **Improve Error Handling in `models/utils.py`**
+   - Focus on the `rewrap_exceptions` decorator. This decorator likely wraps the exceptions to catch and raise custom exceptions or HTTP errors. Start by providing more context in the error message and ensuring that each error has actionable feedback for the user.
+
+**Before:**
+```python
+def rewrap_exceptions(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except SomeException as e:
+            raise CustomException(f"Error occurred: {str(e)}")
+    return wrapper
+```
+
+**Improved Version:**
+```python
+def rewrap_exceptions(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except SomeException as e:
+            raise CustomException(
+                f"An error occurred in {func.__name__}. Reason: {str(e)}. "
+                "Please check the input parameters and ensure all prerequisites are met."
+            )
+    return wrapper
+```
+- This improved version includes the function name (`func.__name__`) to provide more context and give actionable feedback on what the user should check.
+
+#### 2. **Enhance Error Messages in `create_agent.py`**
+
+In the `create_agent` function, error messages should clearly explain the situation and give users insight into what they should do next.
+
+**Before:**
+```python
+raise HTTPException(detail="developer not found", status_code=403)
+```
+
+**Improved Version:**
+```python
+raise HTTPException(
+    detail="Developer not found. Please ensure the provided auth token (which refers to your developer_id) is valid "
+           "and the developer has the necessary permissions to create an agent.",
+    status_code=403
+)
+```
+
+**Before:**
+```python
+raise HTTPException(detail="Invalid input", status_code=400)
+```
+
+**Improved Version:**
+```python
+raise HTTPException(
+    detail="Invalid input provided. Please check that all required fields (such as agent name, developer ID, etc.) are "
+           "filled correctly and match the expected data format.",
+    status_code=400
+)
+```
+
+In this case, you are giving more guidance on what caused the error and what users can do to fix it.
+
+#### 3. **Add Custom Exception Classes (If Necessary)**
+
+If there are multiple specific error types, you may want to create custom exception classes to provide even more clarity.
+
+**Example:**
+```python
+class DeveloperNotFoundException(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=403,
+            detail="Developer not found. Ensure that the auth token refers to a valid developer with sufficient permissions."
+        )
+```
+
+Then, in the `create_agent.py`, you can replace:
+```python
+raise HTTPException(detail="developer not found", status_code=403)
+```
+
+With:
+```python
+raise DeveloperNotFoundException()
+```
+
+#### 4. **Ensure Consistent Testing**
+
+Test the error handling by triggering each error scenario. For example:
+```python
+# Simulate an invalid developer scenario
+response = client.post("/agents", json={"developer_id": "invalid_id", "agent_data": {}})
+assert response.status_code == 403
+assert "Developer not found" in response.json()["detail"]
+```
+
+### Code Changes for Files
+
+#### **File 1: models/utils.py**
+```python
+def rewrap_exceptions(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except SomeException as e:
+            raise CustomException(
+                f"An error occurred in {func.__name__}. Reason: {str(e)}. "
+                "Please check the input parameters and ensure all prerequisites are met."
+            )
+    return wrapper
+```
+
+#### **File 2: models/agent/create_agent.py**
+```python
+from fastapi import HTTPException
+
+class DeveloperNotFoundException(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=403,
+            detail="Developer not found. Ensure that the auth token refers to a valid developer with sufficient permissions."
+        )
+
+class InvalidInputException(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=400,
+            detail="Invalid input provided. Please check that all required fields are filled correctly and match the expected data format."
+        )
+
+def create_agent(developer_id, agent_data):
+    if not is_valid_developer(developer_id):
+        raise DeveloperNotFoundException()
+    
+    if not is_valid_agent_data(agent_data):
+        raise InvalidInputException()
+
+    # Proceed with agent creation
+```
